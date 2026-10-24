@@ -1,0 +1,61 @@
+{
+  "sources": [
+    {
+      "id": "U_DEMO_USER_01",
+      "type": "user",
+      "name": "คุณจเร (แชทส่วนตัว 1-on-1)",
+      "created_at": "2026-10-24T06:07:17.797Z"
+    },
+    {
+      "id": "C_DEMO_GROUP_01",
+      "type": "group",
+      "name": "กลุ่มทีมบริหาร & การตลาด (LINE Group)",
+      "created_at": "2026-10-24T06:07:17.797Z"
+    },
+    {
+      "id": "U5c1a5d38bd2d03f36d7756b394df427e",
+      "type": "user",
+      "name": "ผู้ใช้ LINE (U5c1a5)",
+      "created_at": "2026-10-24T06:07:17.797Z"
+    },
+    {
+      "id": "C95e34455e6aecca827c52e9c8b3c5d5e",
+      "type": "group",
+      "name": "กลุ่ม LINE (C95e34)",
+      "created_at": "2026-10-24T06:07:21.635Z"
+    }
+  ],
+  "reminders": [
+    {
+      "id": "d3cd51e7-76fd-4c98-abeb-4ade40c1b7dc",
+      "source_id": "C95e34455e6aecca827c52e9c8b3c5d5e",
+      "created_by_user_id": "U5c1a5d38bd2d03f36d7756b394df427e",
+      "title": "City เทา รับรถวันที่ 25/2/69 ช่วง",
+      "remind_at": "2026-10-25T03:00:00.000Z",
+      "repeat_type": "once",
+      "status": "cancelled",
+      "created_at": "2026-10-24T06:25:14.093Z"
+    },
+    {
+      "id": "63f1818c-9e76-4486-a896-afd2c788bbc5",
+      "source_id": "C95e34455e6aecca827c52e9c8b3c5d5e",
+      "created_by_user_id": "U5c1a5d38bd2d03f36d7756b394df427e",
+      "title": "นัดรับรถ",
+      "remind_at": "2027-08-25T03:00:00.000Z",
+      "repeat_type": "once",
+      "status": "cancelled",
+      "created_at": "2026-10-24T06:42:43.920Z"
+    },
+    {
+      "id": "123d30e6-b483-429e-a3d3-3b00d0d2953f",
+      "source_id": "C95e34455e6aecca827c52e9c8b3c5d5e",
+      "created_by_user_id": "U5c1a5d38bd2d03f36d7756b394df427e",
+      "title": "นัดรับรถ",
+      "remind_at": "2026-10-25T03:00:00.000Z",
+      "repeat_type": "once",
+      "status": "cancelled",
+      "created_at": "2026-10-24T06:49:54.541Z"
+    }
+  ],
+  "notes": []
+}

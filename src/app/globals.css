@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-cream: #F9F9F6;
+  --accent-sage: #4E8752;
+  --accent-amber: #E27D50;
+  --text-charcoal: #2B2D42;
+  --text-deepgray: #4A4E69;
+  --text-mutedgray: #8D99AE;
+}
+
+body {
+  background-color: #F9F9F6;
+  color: #2B2D42;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ซ่อนแถบเลื่อนแนวนอนของ Horizontal Date Picker ให้ดูสะอาดตา */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// ตารางเก็บผู้ใช้และกลุ่ม (userId หรือ groupId)
+model Source {
+  id        String     @id @db.VarChar(64)
+  type      String     @db.VarChar(10) // 'user' | 'group'
+  name      String?    @db.VarChar(255)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  reminders Reminder[]
+  notes     Note[]
+
+  @@map("sources")
+}
+
+/// ตารางเก็บการแจ้งเตือน
+model Reminder {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceId        String   @map("source_id") @db.VarChar(64)
+  createdByUserId String?  @map("created_by_user_id") @db.VarChar(64)
+  title           String
+  remindAt        DateTime @map("remind_at") @db.Timestamptz(6)
+  repeatType      String   @default("once") @map("repeat_type") @db.VarChar(20) // 'once' | 'daily' | 'weekly' | 'monthly'
+  status          String   @default("pending") @db.VarChar(20) // 'pending' | 'sent' | 'cancelled' | 'completed'
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([status, remindAt])
+  @@index([sourceId, remindAt])
+  @@map("reminders")
+}
+
+/// ตารางเก็บโน้ตและไฟล์
+model Note {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceId  String   @map("source_id") @db.VarChar(64)
+  content   String?
+  fileUrl   String?  @map("file_url")
+  fileType  String?  @map("file_type") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, createdAt(sort: Desc)])
+  @@map("notes")
+}
