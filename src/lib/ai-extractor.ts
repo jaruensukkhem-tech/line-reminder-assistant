@@ -649,3 +649,62 @@ export async function extractTaskWithAI(
     return parseThaiReminderRuleBased(rawText, referenceDate);
   }
 }
+
+/**
+ * รองรับการวิเคราะห์หลายคำสั่งในข้อความเดียว (Batch / Multi-Line Tasks)
+ * เช่น:
+ * กินข้าว 11 โมง
+ * ไปห้องน้ำ 12.00
+ * กลับบ้าน 18.00
+ * หรือ
+ * วันนี้กินข้าว 12.00
+ * พรุ่งนี้ไปเที่ยว 09.00
+ */
+export async function extractTasksFromText(
+  rawText: string,
+  referenceDate = new Date()
+): Promise<ExtractedTaskResult[]> {
+  const trimmed = rawText.trim();
+  const rawLines = trimmed
+    .split(/[\r\n]+/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  // หากมีแค่บรรทัดเดียว วิเคราะห์ตามปกติ
+  if (rawLines.length <= 1) {
+    const single = await extractTaskWithAI(trimmed, referenceDate);
+    return [single];
+  }
+
+  // คัดกรองบรรทัดที่เป็นหัวข้อเรียกบอท เช่น "@ชะโด", "เตือน:", "ช่วยตั้งเตือน"
+  const candidateLines: string[] = [];
+  for (const line of rawLines) {
+    const cleaned = stripTriggerPrefix(line).replace(/^(\d+[\.\)]|\-|\*|•)\s*/, "").trim();
+    if (!cleaned || cleaned === "เตือน" || cleaned === "ตั้งเตือน" || cleaned === "ช่วยเตือน") {
+      continue;
+    }
+    candidateLines.push(cleaned);
+  }
+
+  if (candidateLines.length <= 1) {
+    const single = await extractTaskWithAI(trimmed, referenceDate);
+    return [single];
+  }
+
+  const results: ExtractedTaskResult[] = [];
+  for (const cLine of candidateLines) {
+    const extracted = await extractTaskWithAI(cLine, referenceDate);
+    // ถือว่าเป็น task เตือนหากมี intent เตือน
+    if (extracted.is_reminder_intent) {
+      results.push(extracted);
+    }
+  }
+
+  // หากไม่มีบรรทัดไหนเข้าข่ายเตือน ให้ fallback วิเคราะห์รวมทั้งข้อความ
+  if (results.length === 0) {
+    const single = await extractTaskWithAI(trimmed, referenceDate);
+    return [single];
+  }
+
+  return results;
+}

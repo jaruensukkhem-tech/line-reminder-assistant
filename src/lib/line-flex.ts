@@ -330,3 +330,143 @@ export function buildDueNotificationFlex(reminder: ReminderRecord) {
     },
   };
 }
+
+/**
+ * สร้าง LINE Flex Message ยืนยันการตั้งเตือนแบบหลายรายการพร้อมกัน (Multi-Task Batch)
+ */
+export function buildMultiReminderConfirmationFlex(reminders: ReminderRecord[]) {
+  const count = reminders.length;
+  const sourceId = reminders[0]?.source_id || "";
+  const isGroup = sourceId.startsWith("C");
+  const editUrl = getLiffUrl({ sourceId });
+
+  const items = reminders.map((r, idx) => {
+    const timeText = formatThaiTime(r.remind_at);
+    const dateText = formatThaiDateFull(r.remind_at);
+    return {
+      type: "box" as const,
+      layout: "vertical" as const,
+      backgroundColor: "#FFFFFF",
+      cornerRadius: "12px",
+      paddingAll: "10px",
+      margin: idx === 0 ? "none" : "sm",
+      borderColor: "#EAEAEA",
+      borderWidth: "1px",
+      contents: [
+        {
+          type: "box" as const,
+          layout: "horizontal" as const,
+          contents: [
+            {
+              type: "text" as const,
+              text: `${idx + 1}. ${r.title}`,
+              size: "sm" as const,
+              weight: "bold" as const,
+              color: "#2B2D42",
+              wrap: true,
+              flex: 1,
+            },
+            {
+              type: "text" as const,
+              text: timeText,
+              size: "sm" as const,
+              weight: "bold" as const,
+              color: "#4E8752",
+              align: "end" as const,
+              flex: 0,
+            },
+          ],
+        },
+        {
+          type: "text" as const,
+          text: dateText,
+          size: "xxs" as const,
+          color: "#8D99AE",
+          margin: "xs" as const,
+        },
+      ],
+    };
+  });
+
+  return {
+    type: "flex" as const,
+    altText: `บันทึกการแจ้งเตือน ${count} รายการเรียบร้อยแล้วครับ ⏰`,
+    contents: {
+      type: "bubble" as const,
+      size: "mega" as const,
+      header: {
+        type: "box" as const,
+        layout: "horizontal" as const,
+        backgroundColor: "#4E8752",
+        paddingAll: "16px",
+        contents: [
+          {
+            type: "box" as const,
+            layout: "vertical" as const,
+            backgroundColor: "#FFFFFF26",
+            cornerRadius: "12px",
+            width: "36px",
+            height: "36px",
+            justifyContent: "center" as const,
+            contents: [
+              {
+                type: "text" as const,
+                text: "📋",
+                size: "md" as const,
+                align: "center" as const,
+              },
+            ],
+          },
+          {
+            type: "box" as const,
+            layout: "vertical" as const,
+            margin: "md" as const,
+            contents: [
+              {
+                type: "text" as const,
+                text: `บันทึกแล้ว ${count} รายการ`,
+                color: "#FFFFFF",
+                weight: "bold" as const,
+                size: "md" as const,
+              },
+              {
+                type: "text" as const,
+                text: isGroup ? "แจ้งเตือนสมาชิกทุกคนในกลุ่ม" : "ผู้ช่วยเตือนความจำส่วนตัว",
+                color: "#E3F0E4",
+                size: "xs" as const,
+              },
+            ],
+          },
+        ],
+      },
+      body: {
+        type: "box" as const,
+        layout: "vertical" as const,
+        backgroundColor: "#F9F9F6",
+        paddingAll: "16px",
+        spacing: "sm" as const,
+        contents: items,
+      },
+      footer: {
+        type: "box" as const,
+        layout: "horizontal" as const,
+        backgroundColor: "#F9F9F6",
+        paddingAll: "16px",
+        paddingTop: "0px",
+        contents: [
+          {
+            type: "button" as const,
+            style: "primary" as const,
+            color: "#4E8752",
+            height: "sm" as const,
+            action: {
+              type: "uri" as const,
+              label: "เปิดดูปฏิทินและรายการทั้งหมด",
+              uri: editUrl,
+            },
+          },
+        ],
+      },
+    },
+  };
+}

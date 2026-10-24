@@ -8,8 +8,16 @@ import {
   updateReminder,
   upsertSource,
 } from "@/lib/db";
-import { extractTaskWithAI, shouldTriggerInGroup, stripTriggerPrefix } from "@/lib/ai-extractor";
-import { buildReminderConfirmationFlex } from "@/lib/line-flex";
+import {
+  extractTaskWithAI,
+  extractTasksFromText,
+  shouldTriggerInGroup,
+  stripTriggerPrefix,
+} from "@/lib/ai-extractor";
+import {
+  buildMultiReminderConfirmationFlex,
+  buildReminderConfirmationFlex,
+} from "@/lib/line-flex";
 
 function verifyLineSignature(rawBody: string, signature: string | null, secret: string): boolean {
   if (!signature) return false;
@@ -163,24 +171,24 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        const extracted = await extractTaskWithAI(text, new Date());
+        const extractedList = await extractTasksFromText(text, new Date());
 
         // 2a. Handle Chit-Chat (คุยเล่น / ถามคำถาม / ทักทาย / ขอกำลังใจ)
-        if (extracted.is_chat_intent && extracted.chat_reply) {
+        if (extractedList.length === 1 && extractedList[0].is_chat_intent && extractedList[0].chat_reply) {
           await replyLineMessage(event.replyToken, [
             {
               type: "text",
-              text: extracted.chat_reply,
+              text: extractedList[0].chat_reply,
             },
           ]);
           continue;
         }
 
         // 2b. Handle Note Intent (จดโน้ต)
-        if (extracted.is_note_intent) {
+        if (extractedList.length === 1 && extractedList[0].is_note_intent) {
           const note = await createNote({
             source_id: sourceId,
-            content: extracted.task_title,
+            content: extractedList[0].task_title,
             file_type: "text",
           });
           await replyLineMessage(event.replyToken, [
@@ -192,17 +200,29 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        const reminder = await createReminder({
-          source_id: sourceId,
-          source_type: sourceType,
-          created_by_user_id: userId,
-          title: extracted.task_title,
-          remind_at: extracted.remind_at,
-          repeat_type: extracted.repeat_type,
-        });
+        // 2c. Handle Reminders (รองรับทั้ง 1 รายการ และหลายรายการพร้อมกัน Multi-Task Batch)
+        const createdReminders = [];
+        for (const ext of extractedList) {
+          if (ext.is_reminder_intent) {
+            const reminder = await createReminder({
+              source_id: sourceId,
+              source_type: sourceType,
+              created_by_user_id: userId,
+              title: ext.task_title,
+              remind_at: ext.remind_at,
+              repeat_type: ext.repeat_type,
+            });
+            createdReminders.push(reminder);
+          }
+        }
 
-        const flexMsg = buildReminderConfirmationFlex(reminder);
-        await replyLineMessage(event.replyToken, [flexMsg]);
+        if (createdReminders.length === 1) {
+          const flexMsg = buildReminderConfirmationFlex(createdReminders[0]);
+          await replyLineMessage(event.replyToken, [flexMsg]);
+        } else if (createdReminders.length > 1) {
+          const multiFlexMsg = buildMultiReminderConfirmationFlex(createdReminders);
+          await replyLineMessage(event.replyToken, [multiFlexMsg]);
+        }
       }
     }
 
