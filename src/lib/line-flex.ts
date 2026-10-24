@@ -30,15 +30,21 @@ export function formatThaiDateFull(isoString: string): string {
 
 export function getLiffUrl(params?: Record<string, string>): string {
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3050";
-  const base =
-    liffId && liffId !== "your_line_liff_id"
-      ? `https://liff.line.me/${liffId}`
-      : appUrl;
+  if (liffId && liffId !== "your_line_liff_id" && liffId.trim() !== "") {
+    const base = `https://liff.line.me/${liffId}`;
+    if (!params || Object.keys(params).length === 0) return base;
+    return `${base}?${new URLSearchParams(params).toString()}`;
+  }
 
-  if (!params || Object.keys(params).length === 0) return base;
+  // หากไม่มี LIFF ID หรือค่าเป็น localhost ให้ใช้โดเมน Cloud Production (Vercel) เสมอ
+  let appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (!appUrl || appUrl.includes("localhost") || appUrl.includes("127.0.0.1")) {
+    appUrl = "https://line-reminder-assistant.vercel.app";
+  }
+
+  if (!params || Object.keys(params).length === 0) return appUrl;
   const search = new URLSearchParams(params).toString();
-  return `${base}?${search}`;
+  return `${appUrl}?${search}`;
 }
 
 /**
