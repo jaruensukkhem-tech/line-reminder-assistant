@@ -76,6 +76,54 @@ const THAI_NUMBERS: Record<string, number> = {
   สิบสอง: 12,
 };
 
+/**
+ * ดึงข้อมูลปี เดือน วัน ชั่วโมง นาที ของเวลาปัจจุบันในเขตเวลาไทย (Asia/Bangkok +07:00)
+ */
+export function getBangkokParts(date: Date = new Date()) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const partMap: Record<string, string> = {};
+  for (const p of parts) {
+    partMap[p.type] = p.value;
+  }
+
+  return {
+    year: parseInt(partMap.year, 10),
+    month: parseInt(partMap.month, 10), // 1-12
+    day: parseInt(partMap.day, 10),
+    hour: parseInt(partMap.hour, 10),
+    minute: parseInt(partMap.minute, 10),
+    second: parseInt(partMap.second, 10),
+  };
+}
+
+/**
+ * สร้าง Date object ที่กำหนดเวลาใน Timezone Asia/Bangkok (+07:00) อย่างแม่นยำ
+ * ไม่ว่ารันบนเครื่อง Local หรือ Server ต่างประเทศ (Vercel UTC) เวลาจะไม่คลาดเคลื่อน
+ */
+export function createBangkokDate(
+  year: number,
+  month: number, // 1-12
+  day: number,
+  hour: number,
+  minute: number,
+  second: number = 0
+): Date {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const isoStr = `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}+07:00`;
+  return new Date(isoStr);
+}
+
 function parseThaiNumberWord(word: string): number | null {
   const trimmed = word.trim();
   if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
@@ -133,6 +181,13 @@ export function generateChadoChatReply(text: string): string {
  * ตรวจสอบว่าข้อความมีเจตนาตั้งเตือนหรือมีเรื่องวันเวลาหรือไม่
  */
 function hasReminderOrTimeIntent(text: string): boolean {
+  // หากเป็นข้อความคุยเล่นชัดเจน (เช่น "วันนี้เหนื่อยจัง", "วันนี้กินอะไรดี", "สวัสดีวันนี้") และไม่มีคำสั่งเตือนชัดเจน -> ให้ถือเป็นคุยเล่น
+  if (/เหนื่อย|ท้อ|เครียด|หมดไฟ|เศร้า|เหงา|ขอกำลังใจ|สู้ไม่ไหว|แย่จัง|กินอะไร|หิว|ของกิน|ร้านอาหาร|มื้อเที่ยง|มื้อเย็น|ชาบู|หมูกระทะ|สวัสดี|หวัดดี|hello|hi|เฮลโล|ทักทาย|ฮัลโหล|ทำอะไรได้|เป็นใคร|ชื่ออะไร|ช่วยอะไร|ทำไรอยู่|คืออะไร|แนะนำตัว|ขอบคุณ|แต๊งกิ้ว|น่ารัก|เก่ง|รักชะโด|ชอบชะโด|สุดยอด|มุก|ตลก|ฮา|เล่าเรื่อง/.test(text)) {
+    if (!/เตือน|ตั้งเตือน|ช่วยเตือน|นัด|รับรถ|ประชุม|ส่งงาน|ทำฟัน|กินยา/.test(text)) {
+      return false;
+    }
+  }
+
   // หากมีคำสั่งเตือนชัดเจน
   if (/เตือน|ตั้งเตือน|ช่วยเตือน|นัด|รับรถ|ประชุม|ส่งงาน|ทำฟัน|กินยา/.test(text)) {
     return true;
@@ -193,9 +248,14 @@ export function parseThaiReminderRuleBased(
   }
 
   let working = stripped;
-  const targetDate = new Date(referenceDate);
+  const bkkNow = getBangkokParts(referenceDate);
+  // bkkCalendar เก็บ วัน/เดือน/ปี ของปฏิทินไทยปัจจุบัน (ใช้ UTC methods เพื่อไม่ให้ timezone ท้องถิ่นของ Server เช่น Vercel UTC มารบกวน)
+  const bkkCalendar = new Date(Date.UTC(bkkNow.year, bkkNow.month - 1, bkkNow.day));
   let repeatType: RepeatType = "once";
   const matchedPhrases: string[] = [];
+  let relativeTargetDate: Date | null = null;
+  let timeExplicitlySet = false;
+  let dateExplicitlySet = false;
 
   // Repeat Type Detection
   if (/ทุกวัน|รายวัน|ประจำวัน/.test(working)) {
@@ -212,117 +272,123 @@ export function parseThaiReminderRuleBased(
     working = working.replace(/ทุกเดือน|รายเดือน/g, " ");
   }
 
-  // Relative Time
+  // Relative Time (คำนวณจาก milliseconds ของ referenceDate โดยตรง ซึ่งแม่นยำตามเวลาจริงเสมอ)
   const relMinMatch = working.match(/อีก\s*(\d+)\s*นาที/);
   const relHourMatch = working.match(/อีก\s*(\d+)\s*ชั่วโมง/);
-  let timeExplicitlySet = false;
 
   if (relMinMatch) {
     const mins = parseInt(relMinMatch[1], 10);
-    targetDate.setMinutes(targetDate.getMinutes() + mins, 0, 0);
+    relativeTargetDate = new Date(referenceDate.getTime() + mins * 60000);
     timeExplicitlySet = true;
+    dateExplicitlySet = true;
     matchedPhrases.push(relMinMatch[0]);
     working = working.replace(relMinMatch[0], " ");
   } else if (relHourMatch) {
     const hrs = parseInt(relHourMatch[1], 10);
-    targetDate.setHours(targetDate.getHours() + hrs, targetDate.getMinutes(), 0, 0);
+    relativeTargetDate = new Date(referenceDate.getTime() + hrs * 3600000);
     timeExplicitlySet = true;
+    dateExplicitlySet = true;
     matchedPhrases.push(relHourMatch[0]);
     working = working.replace(relHourMatch[0], " ");
   }
 
-  // Date Phrase Detection
-  let dateExplicitlySet = false;
-  const textMonthMatch = working.match(
-    /(?:วันที่\s*)?(\d{1,2})\s*(มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม|ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)(?:\s*(?:พ\.?ศ\.?|ค\.?ศ\.?)?\s*(\d{2,4}))?/i
-  );
-  if (textMonthMatch) {
-    const day = parseInt(textMonthMatch[1], 10);
-    const month = THAI_MONTH_MAP[textMonthMatch[2]] ?? 1;
-    let year = textMonthMatch[3] ? parseInt(textMonthMatch[3], 10) : targetDate.getFullYear() + 543;
-    if (year >= 2500) {
-      year -= 543;
-    } else if (year < 100) {
-      year = year >= 50 ? (2500 + year) - 543 : year + 2000;
-    }
-    targetDate.setFullYear(year, month, day);
-    dateExplicitlySet = true;
-    matchedPhrases.push(textMonthMatch[0]);
-    working = working.replace(textMonthMatch[0], " ");
-  }
-
-  const slashDateMatch = !dateExplicitlySet ? working.match(/(?:วันที่\s*)?(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})/) : null;
-  if (slashDateMatch) {
-    let day = parseInt(slashDateMatch[1], 10);
-    let monthNum = parseInt(slashDateMatch[2], 10);
-    let year = parseInt(slashDateMatch[3], 10);
-
-    if (monthNum > 12) {
-      if (day <= 12) {
-        const temp = day;
-        day = monthNum;
-        monthNum = temp;
-      } else if (monthNum === 20 || String(monthNum).startsWith("2")) {
-        monthNum = 2;
-      } else {
-        monthNum = Math.min(Math.max(monthNum % 12 || 12, 1), 12);
-      }
-    }
-
-    if (day > 31) day = 31;
-    const month = monthNum - 1;
-
-    if (year >= 2500) {
-      year -= 543;
-    } else if (year < 100) {
-      if (year >= 50) {
-        year = (2500 + year) - 543;
-      } else {
-        year += 2000;
-      }
-    }
-    targetDate.setFullYear(year, month, day);
-    dateExplicitlySet = true;
-    matchedPhrases.push(slashDateMatch[0]);
-    working = working.replace(slashDateMatch[0], " ");
-  } else if (/มะรืน(นี้)?/.test(working)) {
-    targetDate.setDate(targetDate.getDate() + 2);
-    dateExplicitlySet = true;
-    matchedPhrases.push("มะรืนนี้");
-    working = working.replace(/มะรืน(นี้)?/g, " ");
-  } else if (/พรุ่งนี้/.test(working)) {
-    targetDate.setDate(targetDate.getDate() + 1);
-    dateExplicitlySet = true;
-    matchedPhrases.push("พรุ่งนี้");
-    working = working.replace(/พรุ่งนี้/g, " ");
-  } else if (/วันนี้/.test(working)) {
-    dateExplicitlySet = true;
-    matchedPhrases.push("วันนี้");
-    working = working.replace(/วันนี้/g, " ");
-  } else {
-    const weekdayMatch = working.match(
-      /(ทุก)?วัน(อาทิตย์|จันทร์|อังคาร|พุธ|พฤหัสบดี|พฤหัส|ศุกร์|เสาร์)(หน้า|นี้)?/
+  // Date Phrase Detection (ตรวจจับวันที่)
+  if (!relativeTargetDate) {
+    const textMonthMatch = working.match(
+      /(?:วันที่\s*)?(\d{1,2})\s*(มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม|ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)(?:\s*(?:พ\.?ศ\.?|ค\.?ศ\.?)?\s*(\d{2,4}))?/i
     );
-    if (weekdayMatch) {
-      const dayName = weekdayMatch[2];
-      const modifier = weekdayMatch[3];
-      const targetDay = THAI_WEEKDAYS[dayName];
-      if (targetDay !== undefined) {
-        const currentDay = targetDate.getDay();
-        let diff = (targetDay - currentDay + 7) % 7;
-        if (diff === 0 || modifier === "หน้า") {
-          diff += 7;
+    if (textMonthMatch) {
+      const day = parseInt(textMonthMatch[1], 10);
+      const month = THAI_MONTH_MAP[textMonthMatch[2]] ?? 0;
+      let year = textMonthMatch[3] ? parseInt(textMonthMatch[3], 10) : bkkNow.year + 543;
+      if (year >= 2500) {
+        year -= 543;
+      } else if (year < 100) {
+        year = year >= 50 ? (2500 + year) - 543 : year + 2000;
+      }
+      bkkCalendar.setUTCFullYear(year, month, day);
+      dateExplicitlySet = true;
+      matchedPhrases.push(textMonthMatch[0]);
+      working = working.replace(textMonthMatch[0], " ");
+    }
+
+    const slashDateMatch = !dateExplicitlySet ? working.match(/(?:วันที่\s*)?(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})/) : null;
+    if (slashDateMatch) {
+      let day = parseInt(slashDateMatch[1], 10);
+      let monthNum = parseInt(slashDateMatch[2], 10);
+      let year = parseInt(slashDateMatch[3], 10);
+
+      if (monthNum > 12) {
+        if (day <= 12) {
+          const temp = day;
+          day = monthNum;
+          monthNum = temp;
+        } else if (monthNum === 20 || String(monthNum).startsWith("2")) {
+          monthNum = 2;
+        } else {
+          monthNum = Math.min(Math.max(monthNum % 12 || 12, 1), 12);
         }
-        targetDate.setDate(targetDate.getDate() + diff);
-        dateExplicitlySet = true;
-        matchedPhrases.push(weekdayMatch[0]);
-        working = working.replace(weekdayMatch[0], " ");
+      }
+
+      if (day > 31) day = 31;
+      const month = monthNum - 1;
+
+      if (year >= 2500) {
+        year -= 543;
+      } else if (year < 100) {
+        if (year >= 50) {
+          year = (2500 + year) - 543;
+        } else {
+          year += 2000;
+        }
+      }
+      bkkCalendar.setUTCFullYear(year, month, day);
+      dateExplicitlySet = true;
+      matchedPhrases.push(slashDateMatch[0]);
+      working = working.replace(slashDateMatch[0], " ");
+    } else if (/มะรืน(นี้)?/.test(working)) {
+      bkkCalendar.setUTCDate(bkkCalendar.getUTCDate() + 2);
+      dateExplicitlySet = true;
+      matchedPhrases.push("มะรืนนี้");
+      working = working.replace(/มะรืน(นี้)?/g, " ");
+    } else if (/พรุ่งนี้/.test(working)) {
+      bkkCalendar.setUTCDate(bkkCalendar.getUTCDate() + 1);
+      dateExplicitlySet = true;
+      matchedPhrases.push("พรุ่งนี้");
+      working = working.replace(/พรุ่งนี้/g, " ");
+    } else if (/วันนี้/.test(working)) {
+      dateExplicitlySet = true;
+      matchedPhrases.push("วันนี้");
+      working = working.replace(/วันนี้/g, " ");
+    } else {
+      const weekdayMatch = working.match(
+        /(ทุก)?วัน(อาทิตย์|จันทร์|อังคาร|พุธ|พฤหัสบดี|พฤหัส|ศุกร์|เสาร์)(หน้า|นี้)?/
+      );
+      if (weekdayMatch) {
+        const dayName = weekdayMatch[2];
+        const modifier = weekdayMatch[3];
+        const targetDay = THAI_WEEKDAYS[dayName];
+        if (targetDay !== undefined) {
+          const currentDay = bkkCalendar.getUTCDay();
+          let diff = (targetDay - currentDay + 7) % 7;
+          if (diff === 0 || modifier === "หน้า") {
+            diff += 7;
+          }
+          bkkCalendar.setUTCDate(bkkCalendar.getUTCDate() + diff);
+          dateExplicitlySet = true;
+          matchedPhrases.push(weekdayMatch[0]);
+          working = working.replace(weekdayMatch[0], " ");
+        }
       }
     }
   }
 
-  // Time Detection
-  if (!timeExplicitlySet) {
+  // Time Detection (ตรวจจับเวลา)
+  let finalTargetDate: Date;
+
+  if (relativeTargetDate) {
+    finalTargetDate = relativeTargetDate;
+  } else {
     let hours = 9;
     let minutes = 0;
 
@@ -414,15 +480,39 @@ export function parseThaiReminderRuleBased(
     }
 
     if (timeExplicitlySet) {
-      targetDate.setHours(hours, minutes, 0, 0);
-      if (!dateExplicitlySet && targetDate.getTime() <= referenceDate.getTime()) {
-        targetDate.setDate(targetDate.getDate() + 1);
+      finalTargetDate = createBangkokDate(
+        bkkCalendar.getUTCFullYear(),
+        bkkCalendar.getUTCMonth() + 1,
+        bkkCalendar.getUTCDate(),
+        hours,
+        minutes,
+        0
+      );
+
+      // หากไม่ได้ระบุวันที่ และเวลาที่ตั้งผ่านไปแล้วสำหรับวันนี้ ให้ขยับเป็นวันพรุ่งนี้
+      if (!dateExplicitlySet && finalTargetDate.getTime() <= referenceDate.getTime()) {
+        bkkCalendar.setUTCDate(bkkCalendar.getUTCDate() + 1);
+        finalTargetDate = createBangkokDate(
+          bkkCalendar.getUTCFullYear(),
+          bkkCalendar.getUTCMonth() + 1,
+          bkkCalendar.getUTCDate(),
+          hours,
+          minutes,
+          0
+        );
       }
     } else {
       if (dateExplicitlySet) {
-        targetDate.setHours(9, 0, 0, 0);
+        finalTargetDate = createBangkokDate(
+          bkkCalendar.getUTCFullYear(),
+          bkkCalendar.getUTCMonth() + 1,
+          bkkCalendar.getUTCDate(),
+          9,
+          0,
+          0
+        );
       } else {
-        targetDate.setHours(targetDate.getHours() + 1, 0, 0, 0);
+        finalTargetDate = new Date(referenceDate.getTime() + 60 * 60 * 1000);
       }
     }
   }
@@ -435,7 +525,7 @@ export function parseThaiReminderRuleBased(
   return {
     is_reminder_intent: true,
     task_title: cleanTitle || stripped || "รายการแจ้งเตือนใหม่",
-    remind_at: targetDate.toISOString(),
+    remind_at: finalTargetDate.toISOString(),
     repeat_type: repeatType,
     confidence: timeExplicitlySet || dateExplicitlySet ? 0.95 : 0.78,
     engine: "thai-nlp-rule",
@@ -458,13 +548,24 @@ export async function extractTaskWithAI(
   }
 
   try {
+    const bangkokNowParts = getBangkokParts(referenceDate);
+    const bangkokNowIso = createBangkokDate(
+      bangkokNowParts.year,
+      bangkokNowParts.month,
+      bangkokNowParts.day,
+      bangkokNowParts.hour,
+      bangkokNowParts.minute,
+      bangkokNowParts.second
+    ).toISOString();
+    const bangkokFormatted = referenceDate.toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
+
     const prompt = `คุณคือ AI ผู้ช่วยชื่อ "ชะโด" (Chado AI)
 บุคลิกนิสัยของคุณ:
 - สุภาพ น่ารัก อารมณ์ดี เป็นกันเอง พูดจาไพเราะ ลงท้าย ครับ/ค่ะ
 - ให้กำลังใจเก่ง มีอิโมจิน่ารักประกอบ (เช่น 🐟✨, 💖, 😊)
 - ช่วยจัดการเตือนความจำ และเป็นเพื่อนคุยเล่นที่ดีเสมอ
 
-เวลาปัจจุบัน (Asia/Bangkok +07:00): ${referenceDate.toISOString()} (${referenceDate.toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })})
+เวลาปัจจุบันในประเทศไทย (Asia/Bangkok, UTC+7): ${bangkokFormatted} (${bangkokNowIso})
 ข้อความผู้ใช้: "${rawText}"
 
 กฎการวิเคราะห์:
@@ -474,6 +575,7 @@ export async function extractTaskWithAI(
 2. หากผู้ใช้ต้องการ "ตั้งเตือน, นัดหมาย, มีกำหนดเวลา, มีวันที่":
    - ให้ "is_reminder_intent": true, "is_chat_intent": false
    - แปลงเวลาไทย เช่น "พรุ่งนี้บ่ายสอง", "25/02/2569 10:00", "17.45" เป็น ISO 8601
+   - ข้อกำหนดสำคัญ: remind_at ต้องระบุ timezone +07:00 เสมอ เช่น "2026-10-24T15:31:00+07:00" ห้ามตอบเป็นเวลา UTC หรือต่อท้าย Z เด็ดขาด เพื่อป้องกันเวลาคลาดเคลื่อน 7 ชั่วโมง
    - repeat_type: "once" | "daily" | "weekly" | "monthly"
 
 ตอบกลับเป็น JSON เท่านั้น:
@@ -482,7 +584,7 @@ export async function extractTaskWithAI(
   "is_chat_intent": boolean,
   "chat_reply": "ข้อความตอบคุยเล่น (ถ้ามี)",
   "task_title": "ชื่อเรื่องที่ต้องทำ",
-  "remind_at": "ISO 8601 string",
+  "remind_at": "ISO 8601 string เช่น 2026-10-24T15:31:00+07:00",
   "repeat_type": "once" | "daily" | "weekly" | "monthly"
 }`;
 
@@ -525,11 +627,17 @@ export async function extractTaskWithAI(
       };
     }
 
+    let rawRemindAt = String(parsed.remind_at || "").trim();
+    if (rawRemindAt && !/[+-]\d{2}:\d{2}$|Z$/i.test(rawRemindAt)) {
+      rawRemindAt += "+07:00";
+    }
+    const finalRemindAt = rawRemindAt ? new Date(rawRemindAt).toISOString() : referenceDate.toISOString();
+
     return {
       is_reminder_intent: true,
       is_chat_intent: false,
       task_title: parsed.task_title || stripTriggerPrefix(rawText),
-      remind_at: new Date(parsed.remind_at).toISOString(),
+      remind_at: finalRemindAt,
       repeat_type: (["once", "daily", "weekly", "monthly"].includes(parsed.repeat_type)
         ? parsed.repeat_type
         : "once") as RepeatType,
