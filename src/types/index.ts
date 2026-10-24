@@ -34,6 +34,8 @@ export interface NoteRecord {
 export interface ExtractedTaskResult {
   is_reminder_intent: boolean;
   is_note_intent?: boolean;
+  is_chat_intent?: boolean;
+  chat_reply?: string;
   task_title: string;
   remind_at: string; // ISO 8601 timestamp
   repeat_type: RepeatType;

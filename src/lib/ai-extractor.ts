@@ -4,7 +4,7 @@ const BOT_NAMES = ["ชะโด", "chado", "@ชะโด", "@chado"];
 
 /**
  * ตรวจสอบว่าข้อความใน LINE Group มีการแท็กหรือเอ่ยชื่อบอท "ชะโด" หรือไม่
- * ในกลุ่มจะไม่ตอบข้อความทั่วไปหรือคำว่า "เตือน" ลอยๆ เด็ดขาด เพื่อป้องกันการทำงานผิดพลาด
+ * ในกลุ่มจะไม่ตอบข้อความทั่วไป เพื่อป้องกันการทำงานผิดพลาด
  * จะทำงานเฉพาะเมื่อมีการแท็กหรือระบุชื่อ "@ชะโด" หรือ "ชะโด" เท่านั้น
  */
 export function shouldTriggerInGroup(text: string): boolean {
@@ -22,7 +22,7 @@ export function shouldTriggerInGroup(text: string): boolean {
 }
 
 /**
- * ทำความสะอาดคำขึ้นต้น เช่น "@อับดุล ตั้งเตือน..." ให้เหลือเฉพาะเนื้อหาคำสั่ง
+ * ทำความสะอาดคำขึ้นต้น เช่น "@ชะโด ตั้งเตือน..." ให้เหลือเฉพาะเนื้อหาคำสั่ง
  */
 export function stripTriggerPrefix(text: string): string {
   let cleaned = text.trim();
@@ -83,22 +83,93 @@ function parseThaiNumberWord(word: string): number | null {
 }
 
 /**
- * ระบบวิเคราะห์ภาษาไทยแบบ Rule-based NLP (ใช้เป็น Fallback อัตโนมัติหากไม่ได้ตั้งค่า GEMINI_API_KEY)
- * รองรับวลีเวลาไทย เช่น "พรุ่งนี้บ่ายสอง", "17.45", "วันจันทร์หน้า", "ทุ่มครึ่ง", "ทุกวัน"
+ * สร้างคำตอบคุยเล่นแบบน่ารัก สุภาพ เป็นกันเอง อารมณ์ดี และให้กำลังใจเก่ง (Personality แบบ ก)
+ */
+export function generateChadoChatReply(text: string): string {
+  const lower = text.trim().toLowerCase();
+
+  // หมวดให้กำลังใจ / บ่นเหนื่อย / ท้อ / เครียด
+  if (/เหนื่อย|ท้อ|เครียด|หมดไฟ|เศร้า|เหงา|ขอกำลังใจ|สู้ไม่ไหว|แย่จัง/.test(lower)) {
+    return "ชะโดขอส่งกำลังใจก้อนโตๆ ให้เลยครับ! 🐟💖✨ วันนี้คุณเก่งและอดทนมากๆ แล้วนะครับ ถ้าเหนื่อยก็พักดื่มน้ำเย็นๆ ฟังเพลงโปรด หรือหาของอร่อยทานก่อนนะครับ ชะโดคอยอยู่ข้างๆ และเอาใจช่วยเสมอเลยครับ สู้ๆ นะครับ! ✌️😊";
+  }
+
+  // หมวดหิว / ของกิน / กินอะไรดี
+  if (/กินอะไร|หิว|ของกิน|ร้านอาหาร|มื้อเที่ยง|มื้อเย็น|ชาบู|หมูกระทะ/.test(lower)) {
+    const foods = [
+      "ชาบูหรือหมูกระทะร้อนๆ ซักมื้อไหมครับ เยียวยาจิตใจได้ดีสุดๆ เลย! 🍲",
+      "ข้าวกะเพราหมูกรอบไข่ดาวไม่สุก ราดพริกน้ำปลาหอมๆ ครับ ฟินแน่นอน! 🍳😋",
+      "ส้มตำแซ่บๆ ไก่ย่างหนังกรอบ ข้าวเหนียวร้อนๆ ดีไหมครับ เติมความสดชื่น! 🍗",
+      "ก๋วยเตี๋ยวต้มยำน้ำข้นมะนาวสด อร่อยคล่องคอ สดชื่นแน่นอนครับ! 🍜",
+    ];
+    const picked = foods[Math.floor(Math.random() * foods.length)];
+    return `ชะโดขอแนะนำเมนูนี้เลยครับ: ${picked}\nทานให้อร่อยและอิ่มท้อง มีความสุขกับมื้ออาหารนะครับ! 😋🐟`;
+  }
+
+  // หมวดทักทาย
+  if (/^(สวัสดี|หวัดดี|ดีครับ|ดีค่ะ|hello|hi|เฮลโล|ทักทาย|ฮัลโหล)/i.test(lower)) {
+    return "สวัสดีครับ! ชะโดยินดีมากๆ ที่ได้คุยด้วยครับ 🐟🌿 วันนี้เป็นอย่างไรบ้างครับ? มีอะไรให้ชะโดช่วยเตือนความจำ จดโน้ต หรืออยากชวนคุยเล่น บอกได้เลยนะครับ ชะโดพร้อมเสมอครับ! 😊✨";
+  }
+
+  // หมวดถามเกี่ยวกับตัวชะโด / ทำอะไรได้บ้าง
+  if (/ทำอะไรได้|เป็นใคร|ชื่ออะไร|ช่วยอะไร|ทำไรอยู่|คืออะไร|แนะนำตัว/.test(lower)) {
+    return "ผมคือ \"ชะโด AI\" ผู้ช่วยเตือนความจำประจำกลุ่มและเพื่อนคุยเล่นครับ 🐟✨\n\n📌 สิ่งที่ชะโดทำได้:\n1. ⏰ ตั้งเตือนนัดหมาย: เช่น '@ชะโด เตือนพรุ่งนี้ 10.00 ประชุมทีม'\n2. 📝 จดโน้ตบันทึก: เช่น '@ชะโด จดโน้ต รหัสห้อง 9981'\n3. 💬 ชวนคุยเล่น ปรึกษา หรือขอกำลังใจได้ตลอด 24 ชม. เลยครับ!\nยินดีที่ได้รับใช้นะครับ 😊";
+  }
+
+  // หมวดชมเชย / ขอบคุณ / น่ารัก / บอกรัก
+  if (/ขอบคุณ|แต๊งกิ้ว|น่ารัก|เก่ง|รักชะโด|ชอบชะโด|สุดยอด/.test(lower)) {
+    return "ขอบคุณมากๆ เลยครับ! ได้ยินคำนี้แล้วชะโดใจฟูเลยครับ 🥰💖 ชะโดจะตั้งใจคอยช่วยเตือนความจำและอยู่เคียงข้างทุกคนให้ดีที่สุดเลยครับ ยินดีเสมอเลยครับผม! 🐟✨";
+  }
+
+  // หมวดมุกตลก
+  if (/มุก|ตลก|ฮา|เล่าเรื่อง/.test(lower)) {
+    return "ชะโดมีมุกมาฝากครับ! 😄\nถาม: รู้ไหมครับ ทำไมปลาชะโดถึงว่ายน้ำเก่ง?\nตอบ: เพราะถ้าวิ่ง เดี๋ยวสะดุดครีบตัวเองครับ! แฮร่~ 🐟😆\nหวังว่าจะช่วยเรียกรอยยิ้มในวันนี้ได้นะครับ!";
+  }
+
+  // คำตอบทั่วไปแบบอบอุ่น เป็นมิตร
+  return "ชะโดรับฟังอยู่นะครับ! 🐟✨ ยินดีที่ได้คุยด้วยเสมอนะครับ มีเรื่องอะไรอยากเล่า ระบาย หรือมีนัดหมายสำคัญที่กลัวลืม สามารถบอกชะโดได้ทุกเมื่อเลยนะครับ ชะโดพร้อมช่วยเสมอครับ 😊💖";
+}
+
+/**
+ * ตรวจสอบว่าข้อความมีเจตนาตั้งเตือนหรือมีเรื่องวันเวลาหรือไม่
+ */
+function hasReminderOrTimeIntent(text: string): boolean {
+  // หากมีคำสั่งเตือนชัดเจน
+  if (/เตือน|ตั้งเตือน|ช่วยเตือน|นัด|รับรถ|ประชุม|ส่งงาน|ทำฟัน|กินยา/.test(text)) {
+    return true;
+  }
+  // หากมีวลีเกี่ยวกับวันหรือเวลา
+  if (/พรุ่งนี้|มะรืน|วันนี้|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัส|วันศุกร์|วันเสาร์|วันอาทิตย์/.test(text)) {
+    return true;
+  }
+  if (/\d{1,2}[:.]\d{2}/.test(text)) {
+    return true;
+  }
+  if (/(?:โมง|ทุ่ม|นาที|ชั่วโมง|ช่วงเวลา|ตอนเช้า|ตอนบ่าย|ตอนเย็น)/.test(text)) {
+    return true;
+  }
+  if (/\d{1,2}[\/\.-]\d{1,2}/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * ระบบวิเคราะห์ภาษาไทยแบบ Rule-based NLP พร้อมระบบคุยเล่นอัจฉริยะ (Personality แบบ ก)
  */
 export function parseThaiReminderRuleBased(
   rawText: string,
   referenceDate = new Date()
 ): ExtractedTaskResult {
   const trimmed = rawText.trim();
+  const stripped = stripTriggerPrefix(trimmed);
 
-  // Check if it's a note saving command
-  if (/^(จดโน้ต|บันทึกโน้ต|จดว่า|โน้ต)\s+/i.test(trimmed)) {
-    const noteBody = trimmed.replace(/^(จดโน้ต|บันทึกโน้ต|จดว่า|โน้ต)\s+/i, "").trim();
+  // 1. ตรวจสอบว่าเป็นการสั่งจดโน้ตหรือไม่
+  if (/^(จดโน้ต|บันทึกโน้ต|จดว่า|โน้ต)\s+/i.test(trimmed) || /^(จดโน้ต|บันทึกโน้ต|จดว่า|โน้ต)\s+/i.test(stripped)) {
+    const noteBody = stripped.replace(/^(จดโน้ต|บันทึกโน้ต|จดว่า|โน้ต)\s+/i, "").trim();
     return {
       is_reminder_intent: false,
       is_note_intent: true,
-      task_title: noteBody || trimmed,
+      task_title: noteBody || stripped,
       remind_at: referenceDate.toISOString(),
       repeat_type: "once",
       confidence: 0.92,
@@ -106,12 +177,27 @@ export function parseThaiReminderRuleBased(
     };
   }
 
-  let working = stripTriggerPrefix(trimmed);
+  // 2. หากไม่มีเจตนาตั้งเตือนหรือไม่มีเรื่องเวลา -> เป็นการ "คุยเล่น" (Chit-Chat Intent)
+  if (!hasReminderOrTimeIntent(stripped)) {
+    const reply = generateChadoChatReply(stripped || trimmed);
+    return {
+      is_reminder_intent: false,
+      is_chat_intent: true,
+      chat_reply: reply,
+      task_title: stripped,
+      remind_at: referenceDate.toISOString(),
+      repeat_type: "once",
+      confidence: 0.98,
+      engine: "thai-nlp-rule",
+    };
+  }
+
+  let working = stripped;
   const targetDate = new Date(referenceDate);
   let repeatType: RepeatType = "once";
   const matchedPhrases: string[] = [];
 
-  // 1. Repeat Type Detection
+  // Repeat Type Detection
   if (/ทุกวัน|รายวัน|ประจำวัน/.test(working)) {
     repeatType = "daily";
     matchedPhrases.push("ทุกวัน");
@@ -126,7 +212,7 @@ export function parseThaiReminderRuleBased(
     working = working.replace(/ทุกเดือน|รายเดือน/g, " ");
   }
 
-  // 2. Relative Time (เช่น "อีก 30 นาที", "อีก 2 ชั่วโมง")
+  // Relative Time
   const relMinMatch = working.match(/อีก\s*(\d+)\s*นาที/);
   const relHourMatch = working.match(/อีก\s*(\d+)\s*ชั่วโมง/);
   let timeExplicitlySet = false;
@@ -145,10 +231,8 @@ export function parseThaiReminderRuleBased(
     working = working.replace(relHourMatch[0], " ");
   }
 
-  // 3. Date Phrase Detection (เช่น "วันที่ 25/2/69", "25 ก.พ. 2569", "วันนี้", "พรุ่งนี้", "มะรืน", "วันจันทร์หน้า")
+  // Date Phrase Detection
   let dateExplicitlySet = false;
-
-  // 3a. Thai text month: วันที่ 25 กุมภาพันธ์ 2569 หรือ 25 ก.พ. 69
   const textMonthMatch = working.match(
     /(?:วันที่\s*)?(\d{1,2})\s*(มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม|ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)(?:\s*(?:พ\.?ศ\.?|ค\.?ศ\.?)?\s*(\d{2,4}))?/i
   );
@@ -167,25 +251,20 @@ export function parseThaiReminderRuleBased(
     working = working.replace(textMonthMatch[0], " ");
   }
 
-  // 3b. Slash / Dash dates: 25/2/69, 25/02/2569, 25/20/2569 (แก้ไขกรณีพิมพ์ 20 สลับหรือแทน 02)
   const slashDateMatch = !dateExplicitlySet ? working.match(/(?:วันที่\s*)?(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})/) : null;
   if (slashDateMatch) {
     let day = parseInt(slashDateMatch[1], 10);
     let monthNum = parseInt(slashDateMatch[2], 10);
     let year = parseInt(slashDateMatch[3], 10);
 
-    // ป้องกันกรณีผู้ใช้พิมพ์เดือนผิด เช่น 25/20/2569 (ตั้งใจพิมพ์ 25/02 แต่เผลอพิมพ์ 20 หรือสลับวันกับเดือน)
     if (monthNum > 12) {
       if (day <= 12) {
-        // เช่น 02/25/2569 (MM/DD/YYYY) สลับคืนเป็น day=25, month=2
         const temp = day;
         day = monthNum;
         monthNum = temp;
       } else if (monthNum === 20 || String(monthNum).startsWith("2")) {
-        // ผู้ใช้พิมพ์ 20 แทนเดือน 02 (กุมภาพันธ์)
         monthNum = 2;
       } else {
-        // จำกัดไม่ให้เดือนเกิน 12 เพื่อไม่ให้ปี ค.ศ./พ.ศ. ล้นไปปีถัดไปโดยไม่ตั้งใจ
         monthNum = Math.min(Math.max(monthNum % 12 || 12, 1), 12);
       }
     }
@@ -194,10 +273,10 @@ export function parseThaiReminderRuleBased(
     const month = monthNum - 1;
 
     if (year >= 2500) {
-      year -= 543; // แปลง พ.ศ. เป็น ค.ศ. เช่น 2569 -> 2026
+      year -= 543;
     } else if (year < 100) {
       if (year >= 50) {
-        year = (2500 + year) - 543; // 69 -> 2569 -> 2026
+        year = (2500 + year) - 543;
       } else {
         year += 2000;
       }
@@ -242,17 +321,15 @@ export function parseThaiReminderRuleBased(
     }
   }
 
-  // 4. Thai Colloquial Time & Standard Time (เช่น "บ่ายสอง", "17.45", "ช่วง10.00", "09:30")
+  // Time Detection
   if (!timeExplicitlySet) {
     let hours = 9;
     let minutes = 0;
 
-    // 4a. Standard digital time: 17.45, 17:45, ช่วง 10.00
     const digitalMatch = working.match(/(?:เวลา\s*|ตอน\s*|ช่วง\s*)?(\d{1,2})[:.](\d{2})(?:\s*น\.?)?/);
     if (digitalMatch) {
       hours = parseInt(digitalMatch[1], 10);
       minutes = parseInt(digitalMatch[2], 10);
-      // Adjust if user said "บ่าย 2.30" or "เย็น 5.30"
       if (/บ่าย|เย็น/.test(working) && hours >= 1 && hours <= 6) {
         hours += 12;
       }
@@ -281,7 +358,6 @@ export function parseThaiReminderRuleBased(
       timeExplicitlySet = true;
       working = working.replace(/ตอนเที่ยง|เที่ยงตรง|เที่ยง/g, " ");
     } else {
-      // "บ่ายโมงครึ่ง", "บ่ายสอง", "บ่าย 3 โมงครึ่ง"
       const afternoonMatch = working.match(
         /บ่าย\s*(โมง|\d+|หนึ่ง|สอง|สาม|สี่|ห้า)?\s*(?:โมง)?\s*(ครึ่ง|\d+\s*นาที)?/
       );
@@ -339,12 +415,10 @@ export function parseThaiReminderRuleBased(
 
     if (timeExplicitlySet) {
       targetDate.setHours(hours, minutes, 0, 0);
-      // If no explicit date was given and the time today has already passed, bump to tomorrow
       if (!dateExplicitlySet && targetDate.getTime() <= referenceDate.getTime()) {
         targetDate.setDate(targetDate.getDate() + 1);
       }
     } else {
-      // Default to 09:00 AM if date was specified, or +1 hour if neither was specified
       if (dateExplicitlySet) {
         targetDate.setHours(9, 0, 0, 0);
       } else {
@@ -353,7 +427,6 @@ export function parseThaiReminderRuleBased(
     }
   }
 
-  // Clean up remaining connector words to get clean task_title
   const cleanTitle = working
     .replace(/(ช่วงเวลา|เวลา|ตอน|ช่วง|เรื่อง|ให้หน่อย|ด้วยนะ|ครับ|ค่ะ|นะ|หน่อย)/g, " ")
     .replace(/\s+/g, " ")
@@ -361,7 +434,7 @@ export function parseThaiReminderRuleBased(
 
   return {
     is_reminder_intent: true,
-    task_title: cleanTitle || stripTriggerPrefix(trimmed) || "รายการแจ้งเตือนใหม่",
+    task_title: cleanTitle || stripped || "รายการแจ้งเตือนใหม่",
     remind_at: targetDate.toISOString(),
     repeat_type: repeatType,
     confidence: timeExplicitlySet || dateExplicitlySet ? 0.95 : 0.78,
@@ -371,8 +444,7 @@ export function parseThaiReminderRuleBased(
 }
 
 /**
- * สกัดข้อมูลนัดหมายด้วย Google Gemini API (Function Calling / Structured JSON)
- * หากไม่ได้ตั้งค่า GEMINI_API_KEY จะสลับไปใช้ parseThaiReminderRuleBased โดยอัตโนมัติ
+ * สกัดข้อมูลนัดหมายด้วย Google Gemini API หรือสร้างคำตอบคุยเล่น
  */
 export async function extractTaskWithAI(
   rawText: string,
@@ -386,26 +458,32 @@ export async function extractTaskWithAI(
   }
 
   try {
-    const prompt = `คุณคือ AI ผู้ช่วยจัดการตารางเวลาและแจ้งเตือนภาษาไทยชื่อ "ชะโด" (Chado AI)
-เวลาปัจจุบัน (Reference Time, Asia/Bangkok +07:00) คือ: ${referenceDate.toISOString()} (${referenceDate.toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })})
+    const prompt = `คุณคือ AI ผู้ช่วยชื่อ "ชะโด" (Chado AI)
+บุคลิกนิสัยของคุณ:
+- สุภาพ น่ารัก อารมณ์ดี เป็นกันเอง พูดจาไพเราะ ลงท้าย ครับ/ค่ะ
+- ให้กำลังใจเก่ง มีอิโมจิน่ารักประกอบ (เช่น 🐟✨, 💖, 😊)
+- ช่วยจัดการเตือนความจำ และเป็นเพื่อนคุยเล่นที่ดีเสมอ
 
-จงวิเคราะห์ข้อความจากผู้ใช้ต่อไปนี้ และแปลงเป็น JSON ตามโครงสร้างที่กำหนดเท่านั้น:
+เวลาปัจจุบัน (Asia/Bangkok +07:00): ${referenceDate.toISOString()} (${referenceDate.toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })})
 ข้อความผู้ใช้: "${rawText}"
 
-กฎการแปลงเวลาไทย:
-1. "พรุ่งนี้บ่ายสอง" = พรุ่งนี้ เวลา 14:00:00+07:00
-2. "17.45" หรือ "17:45" = เวลา 17:45:00+07:00 (หากเวลาของวันนี้ผ่านไปแล้ว ให้เลื่อนเป็นพรุ่งนี้)
-3. "วันจันทร์หน้า" = วันจันทร์ถัดไป เวลา 09:00:00+07:00 (หากไม่ได้ระบุเวลา)
-4. repeat_type ต้องเป็นหนึ่งใน: "once", "daily", "weekly", "monthly"
-5. task_title ต้องตัดคำสั่ง เช่น "เตือน", "พรุ่งนี้บ่ายสอง" ออกให้เหลือเฉพาะชื่อกิจกรรมที่กระชับ อ่านง่าย
+กฎการวิเคราะห์:
+1. หากผู้ใช้ "คุยเล่น, ถามคำถาม, ขอคำแนะนำ, ชวนคุย, บ่นเหนื่อย, ทักทาย, ขอมุกตลก":
+   - ให้ "is_chat_intent": true, "is_reminder_intent": false
+   - สร้างข้อความตอบกลับที่อบอุ่น สุภาพ น่ารัก ให้กำลังใจ ในฟิลด์ "chat_reply"
+2. หากผู้ใช้ต้องการ "ตั้งเตือน, นัดหมาย, มีกำหนดเวลา, มีวันที่":
+   - ให้ "is_reminder_intent": true, "is_chat_intent": false
+   - แปลงเวลาไทย เช่น "พรุ่งนี้บ่ายสอง", "25/02/2569 10:00", "17.45" เป็น ISO 8601
+   - repeat_type: "once" | "daily" | "weekly" | "monthly"
 
 ตอบกลับเป็น JSON เท่านั้น:
 {
-  "is_reminder_intent": true,
-  "task_title": "ชื่อกิจกรรม",
-  "remind_at": "ISO 8601 string with +07:00 offset",
-  "repeat_type": "once" | "daily" | "weekly" | "monthly",
-  "raw_time_phrase": "วลีเวลาที่ตรวจพบ"
+  "is_reminder_intent": boolean,
+  "is_chat_intent": boolean,
+  "chat_reply": "ข้อความตอบคุยเล่น (ถ้ามี)",
+  "task_title": "ชื่อเรื่องที่ต้องทำ",
+  "remind_at": "ISO 8601 string",
+  "repeat_type": "once" | "daily" | "weekly" | "monthly"
 }`;
 
     const response = await fetch(
@@ -417,7 +495,7 @@ export async function extractTaskWithAI(
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             responseMimeType: "application/json",
-            temperature: 0.1,
+            temperature: 0.3,
           },
         }),
       }
@@ -434,8 +512,22 @@ export async function extractTaskWithAI(
     }
 
     const parsed = JSON.parse(jsonText);
+    if (parsed.is_chat_intent) {
+      return {
+        is_reminder_intent: false,
+        is_chat_intent: true,
+        chat_reply: parsed.chat_reply || generateChadoChatReply(rawText),
+        task_title: rawText,
+        remind_at: referenceDate.toISOString(),
+        repeat_type: "once",
+        confidence: 0.99,
+        engine: "gemini",
+      };
+    }
+
     return {
-      is_reminder_intent: Boolean(parsed.is_reminder_intent ?? true),
+      is_reminder_intent: true,
+      is_chat_intent: false,
       task_title: parsed.task_title || stripTriggerPrefix(rawText),
       remind_at: new Date(parsed.remind_at).toISOString(),
       repeat_type: (["once", "daily", "weekly", "monthly"].includes(parsed.repeat_type)
@@ -443,7 +535,6 @@ export async function extractTaskWithAI(
         : "once") as RepeatType,
       confidence: 0.99,
       engine: "gemini",
-      raw_time_phrase: parsed.raw_time_phrase,
     };
   } catch (err) {
     console.warn("Gemini extraction fallback to Thai NLP rule parser:", err);

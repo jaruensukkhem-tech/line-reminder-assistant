@@ -163,19 +163,20 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        const cleanedContent = stripTriggerPrefix(text);
-        if (!cleanedContent || /^(สวัสดี|หวัดดี|ช่วยอะไรได้บ้าง|วิธีใช้|ใช้ยังไง|help|ทำไรได้|test|ทดสอบ)$/i.test(cleanedContent)) {
+        const extracted = await extractTaskWithAI(text, new Date());
+
+        // 2a. Handle Chit-Chat (คุยเล่น / ถามคำถาม / ทักทาย / ขอกำลังใจ)
+        if (extracted.is_chat_intent && extracted.chat_reply) {
           await replyLineMessage(event.replyToken, [
             {
               type: "text",
-              text: `สวัสดีครับ! มีอะไรให้ "ชะโด" ช่วยเตือนความจำในกลุ่มไหมครับ? 🐟\n\n📌 วิธีสั่งงาน (ต้องแท็กชื่อ @ชะโด เสมอ):\n• @ชะโด เตือนพรุ่งนี้บ่ายสอง ประชุมทีม\n• @ชะโด เตือน 17.45 ไปวิ่งทุกวัน\n• @ชะโด จดโน้ต รหัสเข้าห้องประชุม 9981#`,
+              text: extracted.chat_reply,
             },
           ]);
           continue;
         }
 
-        const extracted = await extractTaskWithAI(text, new Date());
-
+        // 2b. Handle Note Intent (จดโน้ต)
         if (extracted.is_note_intent) {
           const note = await createNote({
             source_id: sourceId,

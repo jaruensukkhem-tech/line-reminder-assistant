@@ -38,6 +38,15 @@ export async function POST(req: NextRequest) {
 
     const extracted = await extractTaskWithAI(text, new Date());
 
+    if (extracted.is_chat_intent) {
+      return NextResponse.json({
+        ignored_in_group: false,
+        type: "chat",
+        extracted,
+        bot_text: extracted.chat_reply,
+      });
+    }
+
     if (extracted.is_note_intent) {
       const note = await createNote({
         source_id,
