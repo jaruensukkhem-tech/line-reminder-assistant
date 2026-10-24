@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import {
   NoteRecord,
   ReminderRecord,
@@ -10,13 +11,35 @@ import {
   SourceType,
 } from "@/types";
 
+let supabaseClient: SupabaseClient | null = null;
+
+export function getSupabase(): SupabaseClient | null {
+  if (supabaseClient) return supabaseClient;
+
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (url && key && url !== "your_supabase_url" && !url.includes("placeholder")) {
+    supabaseClient = createClient(url, key, {
+      auth: { persistSession: false },
+    });
+    return supabaseClient;
+  }
+  return null;
+}
+
 interface LocalStoreSchema {
   sources: SourceRecord[];
   reminders: ReminderRecord[];
   notes: NoteRecord[];
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.VERCEL
+  ? path.join("/tmp", "data")
+  : path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "local-db.json");
 
 function createInitialSeedData(): LocalStoreSchema {
@@ -196,6 +219,32 @@ export async function upsertSource(
   type: SourceType,
   name?: string | null
 ): Promise<SourceRecord> {
+  const supabase = getSupabase();
+  const defaultName = name || (type === "group" ? `กลุ่ม LINE (${id.slice(0, 6)})` : `ผู้ใช้ LINE (${id.slice(0, 6)})`);
+
+  if (supabase) {
+    try {
+      const { data: existing } = await supabase.from("sources").select("*").eq("id", id).maybeSingle();
+      if (existing) {
+        if (name && name !== existing.name) {
+          const { data: updated } = await supabase.from("sources").update({ name }).eq("id", id).select().single();
+          if (updated) return updated as SourceRecord;
+        }
+        return existing as SourceRecord;
+      }
+      const created: SourceRecord = {
+        id,
+        type,
+        name: defaultName,
+        created_at: new Date().toISOString(),
+      };
+      const { data } = await supabase.from("sources").insert(created).select().single();
+      return (data || created) as SourceRecord;
+    } catch (err) {
+      console.warn("[Supabase upsertSource fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   const existing = store.sources.find((s) => s.id === id);
   if (existing) {
@@ -208,7 +257,7 @@ export async function upsertSource(
   const created: SourceRecord = {
     id,
     type,
-    name: name || (type === "group" ? `กลุ่ม LINE (${id.slice(0, 6)})` : `ผู้ใช้ LINE (${id.slice(0, 6)})`),
+    name: defaultName,
     created_at: new Date().toISOString(),
   };
   store.sources.push(created);
@@ -217,11 +266,35 @@ export async function upsertSource(
 }
 
 export async function listSources(): Promise<SourceRecord[]> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await supabase.from("sources").select("*").order("created_at", { ascending: false });
+      if (data) return data as SourceRecord[];
+    } catch (err) {
+      console.warn("[Supabase listSources fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   return store.sources;
 }
 
 export async function getReminders(sourceId?: string): Promise<ReminderRecord[]> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      let q = supabase.from("reminders").select("*").order("remind_at", { ascending: true });
+      if (sourceId) {
+        q = q.eq("source_id", sourceId);
+      }
+      const { data } = await q;
+      if (data) return data as ReminderRecord[];
+    } catch (err) {
+      console.warn("[Supabase getReminders fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   const filtered = sourceId
     ? store.reminders.filter((r) => r.source_id === sourceId)
@@ -232,6 +305,16 @@ export async function getReminders(sourceId?: string): Promise<ReminderRecord[]>
 }
 
 export async function getReminderById(id: string): Promise<ReminderRecord | null> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data } = await supabase.from("reminders").select("*").eq("id", id).maybeSingle();
+      if (data) return data as ReminderRecord;
+    } catch (err) {
+      console.warn("[Supabase getReminderById fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   return store.reminders.find((r) => r.id === id) || null;
 }
@@ -250,6 +333,28 @@ export async function createReminder(input: {
     input.source_type || (input.source_id.startsWith("C") ? "group" : "user"),
     input.source_name
   );
+
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const payload = {
+        source_id: input.source_id,
+        created_by_user_id: input.created_by_user_id || input.source_id,
+        title: input.title,
+        remind_at: new Date(input.remind_at).toISOString(),
+        repeat_type: input.repeat_type || "once",
+        status: "pending",
+        created_at: new Date().toISOString(),
+      };
+      const { data, error } = await supabase.from("reminders").insert(payload).select().single();
+      if (!error && data) {
+        return data as ReminderRecord;
+      }
+      if (error) console.error("[Supabase createReminder error]", error);
+    } catch (err) {
+      console.warn("[Supabase createReminder fallback to local store]", err);
+    }
+  }
 
   const store = readStore();
   const record: ReminderRecord = {
@@ -272,6 +377,23 @@ export async function updateReminder(
   id: string,
   patch: Partial<Pick<ReminderRecord, "title" | "remind_at" | "repeat_type" | "status">>
 ): Promise<ReminderRecord | null> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const payload: Record<string, unknown> = { ...patch };
+      if (patch.remind_at) {
+        payload.remind_at = new Date(patch.remind_at).toISOString();
+      }
+      const { data, error } = await supabase.from("reminders").update(payload).eq("id", id).select().maybeSingle();
+      if (!error && data) {
+        return data as ReminderRecord;
+      }
+      if (error) console.error("[Supabase updateReminder error]", error);
+    } catch (err) {
+      console.warn("[Supabase updateReminder fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   const idx = store.reminders.findIndex((r) => r.id === id);
   if (idx === -1) return null;
@@ -289,6 +411,17 @@ export async function updateReminder(
 }
 
 export async function deleteReminder(id: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase.from("reminders").delete().eq("id", id);
+      if (!error) return true;
+      console.error("[Supabase deleteReminder error]", error);
+    } catch (err) {
+      console.warn("[Supabase deleteReminder fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   const initialLen = store.reminders.length;
   store.reminders = store.reminders.filter((r) => r.id !== id);
@@ -300,6 +433,23 @@ export async function deleteReminder(id: string): Promise<boolean> {
 }
 
 export async function getDueReminders(now = new Date()): Promise<ReminderRecord[]> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("reminders")
+        .select("*")
+        .eq("status", "pending")
+        .lte("remind_at", now.toISOString());
+      if (!error && data) {
+        return data as ReminderRecord[];
+      }
+      if (error) console.error("[Supabase getDueReminders error]", error);
+    } catch (err) {
+      console.warn("[Supabase getDueReminders fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   return store.reminders.filter(
     (r) =>
@@ -309,6 +459,20 @@ export async function getDueReminders(now = new Date()): Promise<ReminderRecord[
 }
 
 export async function getNotes(sourceId?: string): Promise<NoteRecord[]> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      let q = supabase.from("notes").select("*").order("created_at", { ascending: false });
+      if (sourceId) {
+        q = q.eq("source_id", sourceId);
+      }
+      const { data } = await q;
+      if (data) return data as NoteRecord[];
+    } catch (err) {
+      console.warn("[Supabase getNotes fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   const filtered = sourceId
     ? store.notes.filter((n) => n.source_id === sourceId)
@@ -328,6 +492,27 @@ export async function createNote(input: {
     input.source_id,
     input.source_id.startsWith("C") ? "group" : "user"
   );
+
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const payload = {
+        source_id: input.source_id,
+        content: input.content || null,
+        file_url: input.file_url || null,
+        file_type: input.file_type || "text",
+        created_at: new Date().toISOString(),
+      };
+      const { data, error } = await supabase.from("notes").insert(payload).select().single();
+      if (!error && data) {
+        return data as NoteRecord;
+      }
+      if (error) console.error("[Supabase createNote error]", error);
+    } catch (err) {
+      console.warn("[Supabase createNote fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   const note: NoteRecord = {
     id: crypto.randomUUID(),
@@ -343,6 +528,17 @@ export async function createNote(input: {
 }
 
 export async function deleteNote(id: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase.from("notes").delete().eq("id", id);
+      if (!error) return true;
+      console.error("[Supabase deleteNote error]", error);
+    } catch (err) {
+      console.warn("[Supabase deleteNote fallback to local store]", err);
+    }
+  }
+
   const store = readStore();
   const len = store.notes.length;
   store.notes = store.notes.filter((n) => n.id !== id);
